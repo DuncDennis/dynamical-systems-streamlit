@@ -6,7 +6,6 @@ from typing import Any, Callable
 
 import streamlit as st
 import numpy as np
-import inspect
 
 from src import plotly_plots as plpl
 import src.simulate_systems as sims
@@ -25,6 +24,7 @@ SYSTEM_DICT = {
     "SimplestCubicChaotic": sims.SimplestCubicChaotic,
     "SimplestPiecewiseLinearChaotic": sims.SimplestPiecewiseLinearChaotic,
     "DoubleScroll": sims.DoubleScroll,
+    "LotkaVolterra": sims.LotkaVolterra,
     "SimplestDrivenChaotic": sims.SimplestDrivenChaotic,
     "UedaOscillator": sims.UedaOscillator,
     "Henon": sims.Henon,
@@ -60,8 +60,9 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
     sim_class = system_dict[system_name]
 
     if default_parameters is None:
-        fullargspec = inspect.getfullargspec(sim_class.__init__)
-        system_parameters = {x: y for x, y in zip(fullargspec[0][1:], fullargspec[3])}
+        system_parameters = sim_class.default_parameters
+        # fullargspec = inspect.getfullargspec(sim_class.__init__)
+        # system_parameters = {x: y for x, y in zip(fullargspec[0][1:], fullargspec[3])}
     else:
         if system_name in default_parameters.keys():
             system_parameters = default_parameters[system_name]
@@ -183,11 +184,10 @@ def simulate_trajectory(system_name: str, system_parameters: dict[str, Any],
 
 @st.experimental_memo
 def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
-                                  N: int = int(1e3), deviation_scale: float = 1e-10,
-                                  part_time_steps: int = 20, disc_time_steps: int = 1
-                                  ) -> np.ndarray:
+                                  steps: int = int(1e3), deviation_scale: float = 1e-10,
+                                  part_time_steps: int = 15, steps_skip: int = 50) -> np.ndarray:
     sim_instance = SYSTEM_DICT[system_name](**system_parameters)
-    starting_point = sim_instance.simulate(disc_time_steps)[-1, :]
+    starting_point = sim_instance.default_starting_point
 
     if hasattr(sim_instance, "dt"):
         dt = sim_instance.dt
@@ -196,8 +196,9 @@ def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str,
 
     iterator_func = sim_instance.iterate
     lle_conv = meas.largest_lyapunov_exponent(iterator_func, starting_point=starting_point, dt=dt,
-                                              N=N, part_time_steps=part_time_steps,
+                                              steps=steps, part_time_steps=part_time_steps,
                                               deviation_scale=deviation_scale,
+                                              steps_skip=steps_skip,
                                               return_convergence=True)
     return lle_conv
 
@@ -205,19 +206,19 @@ def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str,
 def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any]):
     left, right = st.columns(2)
     with left:
-        N = int(st.number_input("N", value=int(1e3)))
+        steps = int(st.number_input("steps", value=int(1e3)))
     with right:
-        part_time_steps = int(st.number_input("time steps of part", value=20))
+        part_time_steps = int(st.number_input("time steps of each part", value=15))
     left, right = st.columns(2)
     with left:
-        disc_time_steps = int(st.number_input("skipped time steps", value=500, min_value=1))
+        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0))
     with right:
         deviation_scale = 10 ** (float(st.number_input("log (deviation_scale)", value=-10.0)))
 
-    lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, N=N,
+    lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, steps=steps,
                                              part_time_steps=part_time_steps,
                                              deviation_scale=deviation_scale,
-                                             disc_time_steps=disc_time_steps)
+                                             steps_skip=steps_skip)
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE")
     plpl.multiple_figs(figs)
