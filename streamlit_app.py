@@ -5,6 +5,8 @@ import streamlit as st
 import src.streamlit_fragments as stfrag
 
 def main() -> None:
+    st.set_page_config("Dynamical Systems View", page_icon="🦋")
+
     with st.sidebar:
         st.header("System: ")
         system_name, system_parameters = stfrag.st_select_system()
